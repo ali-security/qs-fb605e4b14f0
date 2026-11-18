@@ -1,21 +1,45 @@
 name: 'Tests: node.js 10 - 20'
 
-on: [pull_request, push]
+on: [workflow_dispatch]
 
 permissions:
   contents: read
 
 jobs:
   tests:
-    uses: ljharb/actions/.github/workflows/node.yml@main
-    with:
-      range: '>= 10 < 20'
-      type: minors
-      command: npm run tests-only
+    name: 'node ${{ matrix.node-version }}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+    steps:
+      - uses: actions/checkout@v4
+      # Dependencies install on Node 25: the bundled npm of some target nodes
+      # (npm 6.7.0 on node 11) hangs on install; the target node only runs them.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+      - name: 'pin the npm registry to the release date'
+        run: npm config set registry 'https://:2026-02-11T23%3A39%3A28.828000Z@time-machines-npm.sealsecurity.io/'
+      - name: 'install dependencies on node 25'
+        run: npm install
+      - name: 'run tests-only on the target node via nvm'
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+          nvm install "${{ matrix.node-version }}"
+          nvm use "${{ matrix.node-version }}"
+          node -v
+
+          npm run tests-only
 
   node:
     name: 'node 10 - 20'
     needs: [tests]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - run: true

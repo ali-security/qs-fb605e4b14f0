@@ -1,21 +1,54 @@
 name: 'Tests: node.js < 10'
 
-on: [pull_request, push]
+on: [workflow_dispatch]
 
 permissions:
   contents: read
 
 jobs:
   tests:
-    uses: ljharb/actions/.github/workflows/node.yml@main
-    with:
-      range: '< 10'
-      type: minors
-      command: npm run tests-only
+    name: 'node ${{ matrix.node-version }}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['0.8', '0.10', '0.12', 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+      - name: 'pin the npm registry to the release date'
+        run: npm config set registry 'https://:2026-02-11T23%3A39%3A28.828000Z@time-machines-npm.sealsecurity.io/'
+      - name: 'npm install with Node 25'
+        # The old target npm is TLS-1.0/1.1-only and can't reach the registry, so
+        # install with Node 25; the target node only loads the result.
+        run: npm install
+      - name: 'run tests-only on the target node via nvm'
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+          nvm install "${{ matrix.node-version }}"
+          nvm use "${{ matrix.node-version }}"
+          node -v
+
+          # tape@5 prints upstream's boolean feature-guard skips as a bare
+          # `# SKIP <name>`; append each guard's reason to its SKIP line.
+          # pipefail keeps tape's exit status as the step's verdict.
+          set -o pipefail
+          npm run tests-only 2>&1 | sed -E \
+            -e 's/^# SKIP (stringifies symbols|symbols)$/& (reason: this engine has no Symbol; upstream guard !hasSymbols)/' \
+            -e 's/^# SKIP stringifies bigints$/& (reason: this engine has no BigInt; upstream guard !hasBigInt)/' \
+            -e 's/^# SKIP does not crash when the global Object prototype is frozen$/& (reason: this engine lacks property descriptors or the ES5 override-mistake behaviour; upstream guard !hasPropertyDescriptors || !hasOverrideMistake)/' \
+            -e 's/^# SKIP (parses null objects correctly|can return null objects|stringifies a null object|stringifies an object with a null object as a child)$/& (reason: this engine has no __proto__ null-object support; upstream guard !hasProto)/' \
+            -e 's/^# SKIP can use custom encoder for a buffer object$/& (reason: no Buffer global; upstream guard)/'
 
   node:
     name: 'node < 10'
     needs: [tests]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - run: true
