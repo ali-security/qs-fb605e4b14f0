@@ -407,3 +407,12 @@ test('isRegExp()', function (t) {
 
     t.end();
 });
+
+test('encode()', function (t) {
+    t.equal(utils.encode(JSON.parse('{ "toString": "x" }')), '%5Bobject%20Object%5D', 'object with a non-callable own `toString` does not throw');
+    t.equal(utils.encode(Object.create(null)), '%5Bobject%20Object%5D', 'null-prototype object does not throw');
+    t.equal(utils.encode({ toString: 'x', valueOf: function () { return 7; } }), '7', 'primitive `valueOf` is still used');
+    t.equal(utils.encode(['a', JSON.parse('{ "toString": "x" }')]), 'a%2C%5Bobject%20Object%5D', 'array entry with a non-callable `toString` does not throw');
+    t.equal(utils.encode({ toString: function () { return 'b c'; } }), 'b%20c', 'callable `toString` is unaffected');
+    t.end();
+});
